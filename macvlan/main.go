@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/codegangsta/cli"
@@ -29,14 +28,11 @@ func main() {
 				flat.FlaggwIP,
 				flat.FlagIP,
 				flat.FlagIF,
+				flat.FlagMTU,
+				flat.FlagContainerName,
 			},
-			Action: flats,
+			Action: flat.Flat,
 		},
 	}
 	app.Run(os.Args)
-}
-
-// Run initializes the driver
-func flats(ctx *cli.Context) {
-	fmt.Println("hello world")
 }
