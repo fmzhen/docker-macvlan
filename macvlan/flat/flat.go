@@ -73,5 +73,5 @@ func AddContainerNetworking() {
 		},
 		Mode: mode,
 	}
-	netns.Set()
+
 }
