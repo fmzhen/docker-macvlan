@@ -2,11 +2,11 @@ package flat
 
 import (
 	"errors"
+	"net"
 	"runtime"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/codegangsta/cli"
-	"github.com/docker/libnetwork/netutils"
 	"github.com/fmzhen/docker-macvlan/utils"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -80,8 +80,8 @@ func AddContainerNetworking() {
 		log.Fatalf("the host-interface [ %s ] was not found.", cliIF)
 	}
 
-	hostmacvlanname := netutils.GenerateRandomName(hostprefix, hostlen)
-	hostEth, _ := netlink.LinkByName(macvlanEthIface)
+	hostmacvlanname := utils.GenerateRandomName(hostprefix, hostlen)
+	hostEth, err := netlink.LinkByName(cliIF)
 	if err != nil {
 		log.Warnf("Error looking up the parent iface [ %s ] mode: [ %s ] error: [ %s ]", macvlanEthIface, mode, err)
 	}
@@ -94,7 +94,7 @@ func AddContainerNetworking() {
 		Mode: netlink.MACVLAN_MODE_BRIDGE,
 	}
 	if err := netlink.LinkAdd(macvlandev); err != nil {
-		log.Warnf("failed to create Macvlan: [ %v ] with the error: %s", macvlandev, err)
+		log.Warnf("failed to create Macvlan: [ %v ] with the error: %s", macvlandev.Attrs().Name, err)
 	}
 	//	log.Infof("Created Macvlan port: [ %s ] using the mode: [ %s ]", macvlan.Name, macvlanMode)
 	// ugly, actually ,can get the ns from netns.getfromDocker. the netns have many function, netns.getformpid
@@ -108,13 +108,38 @@ func AddContainerNetworking() {
 	//get root network namespace
 	origns, _ := netns.Get()
 	defer origns.Close()
+
 	//enter the docker container network
 	dockerNS, _ := netns.GetFromPid(dockerPid)
 	defer dockerNS.Close()
+
 	netns.Set(dockerNS)
-	macvlandev, _ = netlink.LinkByName(macvlandev.Attrs().Name)
-	netlink.LinkSetName(macvlandev, "eth1")
-	addr, _ := netlink.ParseAddr(cliIP)
-	netlink.AddrAdd(macvlandev, addr)
-	netlink.LinkSetUp(veth1)
+
+	// use macvlandev can cause error,need type assertion. netlink.Macvlan not must be netlink.Link,fmz
+	macvlandev1, _ := netlink.LinkByName(macvlandev.Attrs().Name)
+
+	// when the eth is up, set name fail,: Device or resource busy
+	netlink.LinkSetDown(macvlandev1)
+	netlink.LinkSetName(macvlandev1, "eth1")
+
+	addr, err := netlink.ParseAddr(cliIP)
+	if err != nil {
+		log.Warnf("failed to parse the ip address %v", cliIP)
+	}
+	netlink.AddrAdd(macvlandev1, addr)
+	netlink.LinkSetUp(macvlandev1)
+	
+	
+	defaultgw := &netlink.Route{
+		Dst: 
+	}
+	/* set the default route, have some problem
+	ip, _ := net.ParseIP("8.8.8.8")
+	routes, _ := netlink.RouteGet(ip)
+	for _, r := range routes {
+		netlink.RouteDel(&r)
+	}
+	*/
+	// use ip instruct
+	netns.Set(origns)
 }
