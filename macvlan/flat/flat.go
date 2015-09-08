@@ -7,7 +7,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/codegangsta/cli"
-	"github.com/fmzhen/docker-macvlan/utils"
+	"github.com/fmzhen/docker-macvlan/macvlan/utils"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 )
@@ -34,10 +34,10 @@ func Flat(ctx *cli.Context) {
 	if err != nil {
 		log.Fatalf("Parse param error:", err)
 	}
-
+	AddContainerNetworking()
 }
 
-// log.fatalf will block the process and return errors. so the errors.new can be remove,fmz.
+// log.fatalf will block the process and return errors. so the errors.new can be remove, or fmt.Errorf(). fmz.
 // when no param pass, it will not equal "", because i set the value(default) first, fmz.
 func ParseParam(ctx *cli.Context) error {
 	if ctx.String("host-interface") == "" {
@@ -80,11 +80,9 @@ func AddContainerNetworking() {
 		log.Fatalf("the host-interface [ %s ] was not found.", cliIF)
 	}
 
-	hostmacvlanname := utils.GenerateRandomName(hostprefix, hostlen)
-	hostEth, err := netlink.LinkByName(cliIF)
-	if err != nil {
-		log.Warnf("Error looking up the parent iface [ %s ] mode: [ %s ] error: [ %s ]", macvlanEthIface, mode, err)
-	}
+	hostmacvlanname, _ := utils.GenerateRandomName(hostprefix, hostlen)
+	hostEth, _ := netlink.LinkByName(cliIF)
+
 	//create the macvlan device
 	macvlandev := &netlink.Macvlan{
 		LinkAttrs: netlink.LinkAttrs{
@@ -94,7 +92,7 @@ func AddContainerNetworking() {
 		Mode: netlink.MACVLAN_MODE_BRIDGE,
 	}
 	if err := netlink.LinkAdd(macvlandev); err != nil {
-		log.Warnf("failed to create Macvlan: [ %v ] with the error: %s", macvlandev.Attrs().Name, err)
+		log.Fatalf("failed to create Macvlan: [ %v ] with the error: %s", macvlandev.Attrs().Name, err)
 	}
 	//	log.Infof("Created Macvlan port: [ %s ] using the mode: [ %s ]", macvlan.Name, macvlanMode)
 	// ugly, actually ,can get the ns from netns.getfromDocker. the netns have many function, netns.getformpid
@@ -124,22 +122,49 @@ func AddContainerNetworking() {
 
 	addr, err := netlink.ParseAddr(cliIP)
 	if err != nil {
-		log.Warnf("failed to parse the ip address %v", cliIP)
+		log.Fatalf("failed to parse the ip address %v", cliIP)
 	}
 	netlink.AddrAdd(macvlandev1, addr)
 	netlink.LinkSetUp(macvlandev1)
-	
-	
+
+	/* set the default route, have some problem. Dst == 0.0.0.0/0? no
 	defaultgw := &netlink.Route{
-		Dst: 
+		Dst: nil,
 	}
-	/* set the default route, have some problem
+	netlink.RouteDel(defaultgw)
 	ip, _ := net.ParseIP("8.8.8.8")
 	routes, _ := netlink.RouteGet(ip)
 	for _, r := range routes {
 		netlink.RouteDel(&r)
 	}
 	*/
-	// use ip instruct
+
+	//if use ip instruction,  it also can config the container, --privileged have no effect.
+	// The sublime test code(test this function) is strange, it only can avaiable in first time. And then fail(even need to reboot)
+	// got it,
+
+	//following code successfully delete the default route in docker container,but error in my host ,no such process
+	routes, _ := netlink.RouteList(nil, netlink.FAMILY_V4)
+	for _, r := range routes {
+		if r.Dst == nil {
+			if err := netlink.RouteDel(&r); err != nil {
+				log.Warnf("delete the default error: ", err)
+			}
+		}
+	}
+
+	if cligwIP == "" {
+		log.Fatal("container gw is null")
+	}
+
+	defaultRoute := &netlink.Route{
+		Dst:       nil,
+		Gw:        net.ParseIP(cligwIP),
+		LinkIndex: macvlandev1.Attrs().Index,
+	}
+	if err := netlink.RouteAdd(defaultRoute); err != nil {
+		log.Warnf("create default route error: ", err)
+	}
+
 	netns.Set(origns)
 }

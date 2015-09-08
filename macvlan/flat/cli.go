@@ -14,9 +14,9 @@ var (
 
 // flat config struct.
 var (
-	cliIP    string
+	cliIP    string //CIDR IP
 	cliIF    string // parent interface to the macvlan iface
-	cligwIP  string // this is the address of an external route,CIDR
+	cligwIP  string // this is the address of an external route
 	cliMTU   = 1500 // generally accepted default MTU
 	cliCName string // the Docker container name which want to config
 )
