@@ -11,6 +11,8 @@ const (
 	appVersion = "0.1"
 	appName    = "macvlan"
 	appUsage   = "Docker Macvlan Networking"
+
+	socketPath = "/run/docker/plugins/"
 )
 
 func main() {
@@ -34,5 +36,22 @@ func main() {
 			Action: flat.Flat,
 		},
 	}
+	app.Before = initEnv
+	app.Action = Run
 	app.Run(os.Args)
+}
+
+
+//create unix domain socket file, and set log level
+func initEnv(ctx *cli.Context) error {
+	socketFile := ctx.String("socket")
+	// Default log level is Info
+	if ctx.Bool("debug") {
+		log.SetLevel(log.DebugLevel)
+	} else {
+		log.SetLevel(log.InfoLevel)
+	}
+	log.SetOutput(os.Stderr)
+	initSock(socketFile)
+	return nil
 }
