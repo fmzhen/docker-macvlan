@@ -41,7 +41,6 @@ func main() {
 	app.Run(os.Args)
 }
 
-
 //create unix domain socket file, and set log level
 func initEnv(ctx *cli.Context) error {
 	socketFile := ctx.String("socket")
