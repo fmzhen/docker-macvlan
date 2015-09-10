@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/samalba/dockerclient"
@@ -76,4 +77,27 @@ func DockerPid(containername string) int {
 	//client, _ := docker.NewClient(endpoint)
 	//client.InspectContainer(containername)
 
+}
+
+// initSock create the socket file if it does not already exist
+func initSock(socketFile string, socketPath string) {
+	if err := os.MkdirAll(socketPath, 0755); err != nil && !os.IsExist(err) {
+		log.Warnf("Could not create net plugin path directory: [ %s ]", err)
+	}
+	// concatenate the absolute path to the spec file handle
+	absFile := fmt.Sprint(socketPath, socketFile)
+	// If the plugin socket file already exists, remove it.
+	if _, err := os.Stat(absFile); err == nil {
+		log.Debugf("socket file [ %s ] already exists, unlinking the old file handle..", absFile)
+		removeSock(absFile)
+	}
+	log.Debugf("The plugin absolute path and handle is [ %s ]", absFile)
+}
+
+// removeSock if an old filehandle exists remove it
+func removeSock(absFile string) {
+	err := os.RemoveAll(absFile)
+	if err != nil {
+		log.Fatalf("Unable to remove the old socket file [ %s ] due to: %s", absFile, err)
+	}
 }

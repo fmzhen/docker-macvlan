@@ -4,7 +4,7 @@ import "github.com/codegangsta/cli"
 
 // the follew option will see in help doc. can set the default value;
 var (
-	//
+	// flat option
 	FlaggwIP          = cli.StringFlag{Name: "gateway", Usage: "IP of the default gateway."}
 	FlagIP            = cli.StringFlag{Name: "ip", Usage: "IP of the container"}
 	FlagIF            = cli.StringFlag{Name: "host-interface", Usage: "Host interface which create macvlan device"}

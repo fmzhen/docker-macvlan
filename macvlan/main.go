@@ -5,6 +5,7 @@ import (
 
 	"github.com/codegangsta/cli"
 	"github.com/fmzhen/docker-macvlan/macvlan/flat"
+	"github.com/fmzhen/macvlan-docker-plugin/plugin/macvlan"
 )
 
 const (
@@ -12,11 +13,20 @@ const (
 	appName    = "macvlan"
 	appUsage   = "Docker Macvlan Networking"
 
-	socketPath = "/run/docker/plugins/"
+	macvlanSocket = "macvlan.sock"
+	socketPath    = "/run/docker/plugins/"
 )
 
 func main() {
-
+	var flagSocket = cli.StringFlag{
+		Name:  "socket, s",
+		Value: macvlanSocket,
+		Usage: "listening unix socket",
+	}
+	var flagDebug = cli.BoolFlag{
+		Name:  "debug, d",
+		Usage: "enable debugging",
+	}
 	app := cli.NewApp()
 	app.Name = appName
 	app.Usage = appUsage
@@ -36,14 +46,22 @@ func main() {
 			Action: flat.Flat,
 		},
 	}
+	app.Flags = []cli.Flag{
+		flagDebug,
+		flagSocket,
+		macvlan.FlagMacvlanMode,
+		macvlan.FlagGateway,
+		macvlan.FlagBridgeSubnet,
+		macvlan.FlagMacvlanEth,
+	}
 	app.Before = initEnv
 	app.Action = Run
 	app.Run(os.Args)
 }
 
-//create unix domain socket file, and set log level
+//create plugin unix domain socket file, and set log level
 func initEnv(ctx *cli.Context) error {
-	socketFile := ctx.String("socket")
+	//socketFile := ctx.String("socket")
 	// Default log level is Info
 	if ctx.Bool("debug") {
 		log.SetLevel(log.DebugLevel)
