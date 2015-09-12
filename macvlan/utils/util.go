@@ -9,6 +9,7 @@ import (
 	"os"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/fmzhen/docker-macvlan/macvlan/utils"
 	"github.com/samalba/dockerclient"
 	"github.com/vishvananda/netlink"
 )
@@ -80,7 +81,7 @@ func DockerPid(containername string) int {
 }
 
 // initSock create the socket file if it does not already exist
-func initSock(socketFile string, socketPath string) {
+func InitSock(socketFile string, socketPath string) {
 	if err := os.MkdirAll(socketPath, 0755); err != nil && !os.IsExist(err) {
 		log.Warnf("Could not create net plugin path directory: [ %s ]", err)
 	}
@@ -89,13 +90,13 @@ func initSock(socketFile string, socketPath string) {
 	// If the plugin socket file already exists, remove it.
 	if _, err := os.Stat(absFile); err == nil {
 		log.Debugf("socket file [ %s ] already exists, unlinking the old file handle..", absFile)
-		removeSock(absFile)
+		RemoveSock(absFile)
 	}
 	log.Debugf("The plugin absolute path and handle is [ %s ]", absFile)
 }
 
 // removeSock if an old filehandle exists remove it
-func removeSock(absFile string) {
+func RemoveSock(absFile string) {
 	err := os.RemoveAll(absFile)
 	if err != nil {
 		log.Fatalf("Unable to remove the old socket file [ %s ] due to: %s", absFile, err)

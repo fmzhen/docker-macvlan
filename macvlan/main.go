@@ -1,11 +1,15 @@
 package main
 
 import (
+	"net"
+	"net/http"
 	"os"
 
 	"github.com/codegangsta/cli"
 	"github.com/fmzhen/docker-macvlan/macvlan/flat"
+	"github.com/fmzhen/docker-macvlan/macvlan/utils"
 	"github.com/fmzhen/macvlan-docker-plugin/plugin/macvlan"
+	"github.com/gorilla/mux"
 )
 
 const (
@@ -59,9 +63,9 @@ func main() {
 	app.Run(os.Args)
 }
 
-//create plugin unix domain socket file, and set log level
+//create the socket filepath if it does not already exist
 func initEnv(ctx *cli.Context) error {
-	//socketFile := ctx.String("socket")
+	socketFile := ctx.String("socket")
 	// Default log level is Info
 	if ctx.Bool("debug") {
 		log.SetLevel(log.DebugLevel)
@@ -69,6 +73,18 @@ func initEnv(ctx *cli.Context) error {
 		log.SetLevel(log.InfoLevel)
 	}
 	log.SetOutput(os.Stderr)
-	initSock(socketFile)
+	utils.InitSock(socketFile, socketPath)
 	return nil
+}
+
+// Run initializes the driver
+func Run(ctx *cli.Context) {
+	absSocket := fmt.Sprint(pluginPath, ctx.String("socket"))
+
+	listener, err := net.Listen("unix", absSocket)
+	if err != nil {
+		return err
+	}
+	router := mux.NewRouter()
+	return http.Serve(listener)
 }
