@@ -17,13 +17,34 @@ func Listen(absSocket string) {
 	}
 	router := mux.NewRouter()
 
-	router.HandleFunc("*", justForward)
-	//router.HandleFunc("/", sayhelloName)
+	// can match all request, ugly method
+	router.PathPrefix("/").HandlerFunc(justForward)
 	http.Serve(listener, router)
 }
 
 func justForward(w http.ResponseWriter, r *http.Request) {
-	conn, err := net.Dial("unix", "/var/docker")
+	//conn, err := net.Dial("unix", "/var/run/docker.sock")
+
+	// the request header cann't be set
+	//r.Header.Set("Host", "/var/run/docker.sock")
+
+	/*
+		fmt.Println("request:", r)
+		fmt.Println("url:", r.URL)
+		fmt.Println("host", r.Host)
+		fmt.Println("header:", r.Header)
+		fmt.Println("body:", r.Body)
+	*/
+	//the response is nil, Request.RequestURI can't be set in client requests.
+	httpClient := &http.Client{}
+	_, err := httpClient.Do(r)
+	if err != nil {
+		fmt.Print("response error:", err)
+	}
+
+	// redirect is not support unix scheme maybe ,  fail.
+	//http.Redirect(w, r, "/var/run/docker.sock", 301)
+
 }
 
 // test socket avaiable ,hello world
