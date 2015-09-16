@@ -1,11 +1,17 @@
 package utils
 
 import (
+	"bytes"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
+	"net/http"
+	"net/url"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/samalba/dockerclient"
@@ -76,4 +82,73 @@ func DockerPid(containername string) int {
 	//client, _ := docker.NewClient(endpoint)
 	//client.InspectContainer(containername)
 
+}
+
+func NewHTTPClient(u *url.URL, tlsConfig *tls.Config) *http.Client {
+	httpTransport := &http.Transport{
+		TLSClientConfig: tlsConfig,
+	}
+
+	switch u.Scheme {
+	case "unix":
+		socketPath := u.Path
+		unixDial := func(proto, addr string) (net.Conn, error) {
+			return net.Dial("unix", socketPath)
+		}
+		httpTransport.Dial = unixDial
+		// Override the main URL object so the HTTP lib won't complain
+		u.Scheme = "http"
+		u.Host = "unix.sock"
+		u.Path = ""
+	default:
+		httpTransport.Dial = func(proto, addr string) (net.Conn, error) {
+			return net.Dial(proto, addr)
+		}
+	}
+	return &http.Client{Transport: httpTransport}
+}
+
+func DoRequest(client *http.Client, u *url.URL, method string, path string, body []byte, headers map[string]string) ([]byte, error) {
+	b := bytes.NewBuffer(body)
+
+	reader, err := DoStreamRequest(client, u, method, path, b, headers)
+	if err != nil {
+		return nil, err
+	}
+
+	defer reader.Close()
+	data, err := ioutil.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func DoStreamRequest(client *http.Client, u *url.URL, method string, path string, in io.Reader, headers map[string]string) (io.ReadCloser, error) {
+	if (method == "POST" || method == "PUT") && in == nil {
+		in = bytes.NewReader(nil)
+	}
+	req, err := http.NewRequest(method, u.String()+path, in)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", "application/json")
+	if headers != nil {
+		for header, value := range headers {
+			req.Header.Add(header, value)
+		}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode == 404 {
+		return nil, errors.New("Not found")
+	}
+	if resp.StatusCode >= 400 {
+		return nil, errors.New("error occur: code >= 400")
+	}
+
+	return resp.Body, nil
 }

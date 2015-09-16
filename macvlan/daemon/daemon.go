@@ -2,11 +2,14 @@ package daemon
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/fmzhen/docker-macvlan/macvlan/utils"
 	"github.com/gorilla/mux"
 )
 
@@ -27,23 +30,48 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 
 	// the request header cann't be set
 	//r.Header.Set("Host", "/var/run/docker.sock")
-
 	/*
 		fmt.Println("request:", r)
 		fmt.Println("url:", r.URL)
 		fmt.Println("host", r.Host)
 		fmt.Println("header:", r.Header)
 		fmt.Println("body:", r.Body)
-	*/
-	//the response is nil, Request.RequestURI can't be set in client requests.
-	httpClient := &http.Client{}
-	_, err := httpClient.Do(r)
-	if err != nil {
-		fmt.Print("response error:", err)
-	}
 
+		//the response is nil, Request.RequestURI (or host, where set uri?) can't be set in client requests.
+		httpClient := &http.Client{}
+		_, err := httpClient.Do(r)
+		if err != nil {
+			fmt.Print("response error:", err)
+		}
+	*/
 	// redirect is not support unix scheme maybe ,  fail.
 	//http.Redirect(w, r, "/var/run/docker.sock", 301)
+
+	//inspire from samaba dockerclient
+	daemonUrl := "unix:///var/run/docker.sock"
+	u, _ := url.Parse(daemonUrl)
+
+	// u : http://unix.sock
+	httpClient := utils.NewHTTPClient(u, nil)
+
+	method := r.Method
+	path := r.URL.String()
+	body, _ := ioutil.ReadAll(r.Body)
+
+	h := r.Header
+	h2 := make(map[string]string, len(h))
+	for k, vv := range h {
+		vv2 := strings.Join(vv, ", ")
+		h2[k] = vv2
+	}
+
+	//
+	data, err := utils.DoRequest(httpClient, u, method, path, body, h2)
+	if err != nil {
+		log.Fatalln("dorequest error: ", err)
+	}
+
+	fmt.Fprintf(w, "%s", data)
 
 }
 
