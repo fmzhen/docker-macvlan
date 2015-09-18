@@ -45,20 +45,20 @@ func ParseParam(ctx *cli.Context) error {
 		return errors.New("Required flag [ host-interface ] is missing")
 	}
 
-	cliIF = ctx.String("host-interface")
+	CliIF = ctx.String("host-interface")
 	if ctx.String("ip") == "" || ctx.String("gateway") == "" || ctx.String("container-name") == "" {
 		log.Fatalf("Required flag [ ip or gateway or container-name ] is missing")
 		return errors.New("Required flag [ ip or gateway or container-name ] is missing")
 	}
 
-	cliIP = ctx.String("ip")
-	cligwIP = ctx.String("gateway")
-	cliCName = ctx.String("container-name")
+	CliIP = ctx.String("ip")
+	CligwIP = ctx.String("gateway")
+	CliCName = ctx.String("container-name")
 
 	if ctx.Int("mtu") <= 0 {
-		cliMTU = cliMTU
+		CliMTU = CliMTU
 	} else if ctx.Int("mtu") >= minMTU {
-		cliMTU = ctx.Int("mtu")
+		CliMTU = ctx.Int("mtu")
 	} else {
 		log.Fatalf("The MTU value passed [ %d ] must be greater than [ %d ] bytes per rfc791", ctx.Int("mtu"), minMTU)
 		return errors.New("the mtu must be int")
@@ -73,15 +73,15 @@ func VerifyParam() {
 
 //netlink is not avaible in MAC OS, build fail.
 func AddContainerNetworking() {
-	if cliIF == "" {
+	if CliIF == "" {
 		log.Fatal("the host-interface is missing,please give one")
 	}
-	if ok := utils.ValidateHostIface(cliIF); !ok {
-		log.Fatalf("the host-interface [ %s ] was not found.", cliIF)
+	if ok := utils.ValidateHostIface(CliIF); !ok {
+		log.Fatalf("the host-interface [ %s ] was not found.", CliIF)
 	}
 
 	hostmacvlanname, _ := utils.GenerateRandomName(hostprefix, hostlen)
-	hostEth, _ := netlink.LinkByName(cliIF)
+	hostEth, _ := netlink.LinkByName(CliIF)
 
 	//create the macvlan device
 	macvlandev := &netlink.Macvlan{
@@ -96,7 +96,8 @@ func AddContainerNetworking() {
 	}
 	//	log.Infof("Created Macvlan port: [ %s ] using the mode: [ %s ]", macvlan.Name, macvlanMode)
 	// ugly, actually ,can get the ns from netns.getfromDocker. the netns have many function, netns.getformpid
-	dockerPid := utils.DockerPid(cliCName)
+	// netns.getfromdocker the arg can not be the container name
+	dockerPid := utils.DockerPid(CliCName)
 	//the macvlandev can be use directly, don't get netlink.byname again.
 	netlink.LinkSetNsPid(macvlandev, dockerPid)
 
@@ -120,9 +121,9 @@ func AddContainerNetworking() {
 	netlink.LinkSetDown(macvlandev1)
 	netlink.LinkSetName(macvlandev1, "eth1")
 
-	addr, err := netlink.ParseAddr(cliIP)
+	addr, err := netlink.ParseAddr(CliIP)
 	if err != nil {
-		log.Fatalf("failed to parse the ip address %v", cliIP)
+		log.Fatalf("failed to parse the ip address %v", CliIP)
 	}
 	netlink.AddrAdd(macvlandev1, addr)
 	netlink.LinkSetUp(macvlandev1)
@@ -153,18 +154,17 @@ func AddContainerNetworking() {
 		}
 	}
 
-	if cligwIP == "" {
+	if CligwIP == "" {
 		log.Fatal("container gw is null")
 	}
 
 	defaultRoute := &netlink.Route{
 		Dst:       nil,
-		Gw:        net.ParseIP(cligwIP),
+		Gw:        net.ParseIP(CligwIP),
 		LinkIndex: macvlandev1.Attrs().Index,
 	}
 	if err := netlink.RouteAdd(defaultRoute); err != nil {
 		log.Warnf("create default route error: ", err)
 	}
-
 	netns.Set(origns)
 }

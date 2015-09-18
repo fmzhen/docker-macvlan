@@ -152,3 +152,5 @@ func DoStreamRequest(client *http.Client, u *url.URL, method string, path string
 
 	return resp.Body, nil
 }
+
+//TODO: add the container name validate.

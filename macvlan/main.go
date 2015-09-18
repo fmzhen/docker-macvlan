@@ -7,6 +7,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/codegangsta/cli"
 	"github.com/fmzhen/docker-macvlan/macvlan/daemon"
+	"github.com/fmzhen/docker-macvlan/macvlan/dhcp"
 	"github.com/fmzhen/docker-macvlan/macvlan/flat"
 	"github.com/fmzhen/macvlan-docker-plugin/plugin/macvlan"
 )
@@ -47,6 +48,17 @@ func main() {
 				flat.FlagContainerName,
 			},
 			Action: flat.Flat,
+		},
+		{
+			Name:    "dhcp",
+			Aliases: []string{"d"},
+			Usage:   "add a docker container to host network use local dhcp server",
+			Flags: []cli.Flag{
+				flat.FlagIF,
+				flat.FlagMTU,
+				flat.FlagContainerName,
+			},
+			Action: dhcp.Dhcp,
 		},
 	}
 	app.Flags = []cli.Flag{
