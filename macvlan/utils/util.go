@@ -12,8 +12,10 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/coreos/etcd/client"
 	"github.com/samalba/dockerclient"
 	"github.com/vishvananda/netlink"
 )
@@ -154,3 +156,26 @@ func DoStreamRequest(client *http.Client, u *url.URL, method string, path string
 }
 
 //TODO: add the container name validate.
+
+func etcdClientNew(endpoints []string) client.KeysAPI {
+	cfg := client.Config{
+		Endpoints:               endpoints,
+		Transport:               client.DefaultTransport,
+		HeaderTimeoutPerRequest: time.Second,
+	}
+
+	c, err := client.New(cfg)
+	if err != nil {
+		log.Fatalf("etcd client new fail", err)
+	}
+	kapi := client.NewKeysAPI(c)
+	return kapi
+	/*
+		resp, err = kapi.Set(context.Background(), "foo", "bar", nil)
+		if err != nil {
+			log.Fatal(err)
+		} else {
+			log.Print(resp)
+		}
+	*/
+}

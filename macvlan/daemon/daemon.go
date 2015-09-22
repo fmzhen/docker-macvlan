@@ -47,6 +47,11 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 	// redirect is not support unix scheme maybe ,  fail.
 	//http.Redirect(w, r, "/var/run/docker.sock", 301)
 
+	// create a container
+	if r.Method == "POST" && strings.Contains(r.URL.String(), "/containers/create") {
+
+	}
+
 	//inspire from samaba dockerclient
 	daemonUrl := "unix:///var/run/docker.sock"
 	u, _ := url.Parse(daemonUrl)
