@@ -102,6 +102,7 @@ func addDHCPNetwork() {
 		}
 	}
 
+	//it doesn't work, the problem at the atgs don't pass to the shell script
 	dhcpReqpath := "/home/fmzhen/go/src/github.com/fmzhen/docker-macvlan/macvlan/dhcp/dhcpReq.sh"
 	exec.Command(dhcpReqpath, dhcpClient, string(dockerPid), flat.CliCName).Run()
 
