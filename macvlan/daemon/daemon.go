@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -12,6 +13,13 @@ import (
 	"github.com/fmzhen/docker-macvlan/macvlan/utils"
 	"github.com/gorilla/mux"
 )
+
+type EnvConfig struct {
+	TYPE   string
+	IP     string
+	GW     string
+	HOSTIF string
+}
 
 func Listen(absSocket string) {
 	listener, err := net.Listen("unix", absSocket)
@@ -48,9 +56,11 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 	//http.Redirect(w, r, "/var/run/docker.sock", 301)
 
 	// create a container
-	if r.Method == "POST" && strings.Contains(r.URL.String(), "/containers/create") {
-
-	}
+	//var dockerName string
+	r.ParseForm()
+	method := r.Method
+	path := r.URL.String()
+	body, _ := ioutil.ReadAll(r.Body)
 
 	//inspire from samaba dockerclient
 	daemonUrl := "unix:///var/run/docker.sock"
@@ -59,10 +69,6 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 	// u : http://unix.sock
 	httpClient := utils.NewHTTPClient(u, nil)
 
-	method := r.Method
-	path := r.URL.String()
-	body, _ := ioutil.ReadAll(r.Body)
-
 	h := r.Header
 	h2 := make(map[string]string, len(h))
 	for k, vv := range h {
@@ -70,12 +76,28 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 		h2[k] = vv2
 	}
 
-	//
 	data, err := utils.DoRequest(httpClient, u, method, path, body, h2)
 	if err != nil {
 		log.Fatalln("dorequest error: ", err)
 	}
 
+	if method == "POST" && strings.Contains(path, "/containers/create") {
+		env := utils.GetEnv(body)
+		if _, ok := env["TYPE"]; ok {
+			if env["TYPE"] == "dhcp" {
+
+			} else if env["TYPE"] == "flat" {
+
+			}
+		}
+		if strings.Contains(path, "?name=") {
+			//dockerName = strings.Join(r.Form["name"], "")
+		} else {
+			json.Unmarshal(data)
+			//dockerName =
+		}
+	}
+	fmt.Printf("%s", data)
 	fmt.Fprintf(w, "%s", data)
 
 }

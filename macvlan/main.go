@@ -9,7 +9,6 @@ import (
 	"github.com/fmzhen/docker-macvlan/macvlan/daemon"
 	"github.com/fmzhen/docker-macvlan/macvlan/dhcp"
 	"github.com/fmzhen/docker-macvlan/macvlan/flat"
-	"github.com/fmzhen/macvlan-docker-plugin/plugin/macvlan"
 )
 
 const (
@@ -64,10 +63,7 @@ func main() {
 	app.Flags = []cli.Flag{
 		flagDebug,
 		flagSocket,
-		macvlan.FlagMacvlanMode,
-		macvlan.FlagGateway,
-		macvlan.FlagBridgeSubnet,
-		macvlan.FlagMacvlanEth,
+		flat.FlagEtcd,
 	}
 	app.Before = initEnv
 	app.Action = Run

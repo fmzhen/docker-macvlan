@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -178,4 +180,29 @@ func etcdClientNew(endpoints []string) client.KeysAPI {
 			log.Print(resp)
 		}
 	*/
+}
+
+func GetDockerNameFromID(ID string) string {
+	docker, err := dockerclient.NewDockerClient("unix:///var/run/docker.sock", nil)
+	if err != nil {
+		log.Fatal("Fail to connect to Docker daemon")
+	}
+	dockerInfo, err := docker.InspectContainer(ID)
+	if err != nil {
+		log.Fatalf("Fail to inspcet the containername ID: %s", ID)
+	}
+
+	return dockerInfo.Name
+}
+
+func GetEnv(data []byte) map[string]string {
+	env := make(map[string]string)
+	var dat map[string]interface{}
+	json.Unmarshal(data, &dat)
+	envInter := dat["Env"].([]interface{})
+	for _, v := range envInter {
+		sli := strings.Split(v.(string), "=")
+		env[sli[0]] = sli[1]
+	}
+	return env
 }
