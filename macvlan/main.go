@@ -88,5 +88,6 @@ func initEnv(ctx *cli.Context) error {
 func Run(ctx *cli.Context) {
 	absSocket := fmt.Sprint(socketPath, ctx.String("socket"))
 
+	flat.CliEtcd = ctx.String("etcd")
 	daemon.Listen(absSocket)
 }

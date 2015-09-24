@@ -17,6 +17,7 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/bitly/go-simplejson"
 	"github.com/coreos/etcd/client"
 	"github.com/samalba/dockerclient"
 	"github.com/vishvananda/netlink"
@@ -159,7 +160,7 @@ func DoStreamRequest(client *http.Client, u *url.URL, method string, path string
 
 //TODO: add the container name validate.
 
-func etcdClientNew(endpoints []string) client.KeysAPI {
+func EtcdClientNew(endpoints []string) client.KeysAPI {
 	cfg := client.Config{
 		Endpoints:               endpoints,
 		Transport:               client.DefaultTransport,
@@ -182,6 +183,7 @@ func etcdClientNew(endpoints []string) client.KeysAPI {
 	*/
 }
 
+// raw "/itd" not "itd" , add the etcd will ignore "/". But better change to "itd"
 func GetDockerNameFromID(ID string) string {
 	docker, err := dockerclient.NewDockerClient("unix:///var/run/docker.sock", nil)
 	if err != nil {
@@ -192,7 +194,7 @@ func GetDockerNameFromID(ID string) string {
 		log.Fatalf("Fail to inspcet the containername ID: %s", ID)
 	}
 
-	return dockerInfo.Name
+	return strings.TrimPrefix(dockerInfo.Name, "/")
 }
 
 func GetEnv(data []byte) map[string]string {
@@ -205,4 +207,10 @@ func GetEnv(data []byte) map[string]string {
 		env[sli[0]] = sli[1]
 	}
 	return env
+}
+
+func GetNetworkMode(data []byte) string {
+	js, _ := simplejson.NewJson(data)
+	networkmode, _ := js.Get("HostConfig").Get("NetworkMode").String()
+	return networkmode
 }

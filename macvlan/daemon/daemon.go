@@ -10,9 +10,14 @@ import (
 	"strings"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/coreos/etcd/Godeps/_workspace/src/golang.org/x/net/context"
+	"github.com/coreos/etcd/client"
+	"github.com/fmzhen/docker-macvlan/macvlan/flat"
 	"github.com/fmzhen/docker-macvlan/macvlan/utils"
 	"github.com/gorilla/mux"
 )
+
+var kapi client.KeysAPI
 
 type EnvConfig struct {
 	TYPE   string
@@ -22,12 +27,14 @@ type EnvConfig struct {
 }
 
 func Listen(absSocket string) {
+	//etcd init
+	kapi = utils.EtcdClientNew(strings.Split(flat.CliEtcd, ","))
+
 	listener, err := net.Listen("unix", absSocket)
 	if err != nil {
 		log.Fatalf("net listen error: ", err)
 	}
 	router := mux.NewRouter()
-
 	// can match all request, ugly method
 	router.PathPrefix("/").HandlerFunc(justForward)
 	http.Serve(listener, router)
@@ -55,9 +62,13 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 	// redirect is not support unix scheme maybe ,  fail.
 	//http.Redirect(w, r, "/var/run/docker.sock", 301)
 
-	// create a container
-	//var dockerName string
-	r.ParseForm()
+	fmt.Println("request:", r)
+	fmt.Println("url:", r.URL)
+	fmt.Println("host", r.Host)
+	fmt.Println("header:", r.Header)
+	fmt.Println("body:", r.Body)
+
+	// forward the request
 	method := r.Method
 	path := r.URL.String()
 	body, _ := ioutil.ReadAll(r.Body)
@@ -80,24 +91,60 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Fatalln("dorequest error: ", err)
 	}
-
+	fmt.Printf("response %s \n", data)
+	// process  create a container,and store etcd
+	var dockerName string
+	r.ParseForm()
 	if method == "POST" && strings.Contains(path, "/containers/create") {
+		//get docker network mode
+		networkMode := utils.GetNetworkMode(body)
+		ok5 := networkMode == "bridge" || networkMode == "none"
+		//get docker name
+		if strings.Contains(path, "?name=") {
+			dockerName = strings.Join(r.Form["name"], "")
+		} else {
+			var dat map[string]interface{}
+			json.Unmarshal(data, &dat)
+			dockerId := dat["Id"].(string)
+			dockerName = utils.GetDockerNameFromID(dockerId)
+		}
+
+		// get env and store etcd
 		env := utils.GetEnv(body)
-		if _, ok := env["TYPE"]; ok {
+		_, ok1 := env["TYPE"]
+		_, ok2 := env["HOSTIF"]
+		_, ok3 := env["IP"]
+		_, ok4 := env["GW"]
+		if ok1 && ok2 && ok5 {
 			if env["TYPE"] == "dhcp" {
-
-			} else if env["TYPE"] == "flat" {
-
+				key := "/dhcp/" + dockerName
+				_, err := kapi.Set(context.Background(), key, env["HOSTIF"], nil)
+				if err != nil {
+					log.Fatalf("set dhcp etcd error,docker name:%s, error: %v", dockerName, err)
+				}
+				log.Infof("%s writed to dhcp etcd, host-interface: %s \n", dockerName, env["HOSTIF"])
+			} else if env["TYPE"] == "flat" && ok3 && ok4 {
+				key := "/flat/" + dockerName
+				value := env["IP"] + "," + env["GW"] + "," + env["HOSTIF"]
+				_, err := kapi.Set(context.Background(), key, value, nil)
+				if err != nil {
+					log.Fatalf("set flat etcd error, docker name: %s, err: %v", dockerName, err)
+				}
+				log.Infof("%s writed to flat etcd, value: %s \n", dockerName, value)
 			}
 		}
-		if strings.Contains(path, "?name=") {
-			//dockerName = strings.Join(r.Form["name"], "")
+	}
+
+	// process delete a container,and remove etcd data
+	if method == "DELETE" {
+		sIndex := strings.LastIndex(path, "/")
+		eIndex := strings.LastIndex(path, "?")
+		if eIndex == -1 {
+			dockerNameOrId := path[index+1:]
 		} else {
-			json.Unmarshal(data)
-			//dockerName =
+
 		}
 	}
-	fmt.Printf("%s", data)
 	fmt.Fprintf(w, "%s", data)
 
 }
