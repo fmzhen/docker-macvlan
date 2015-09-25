@@ -184,19 +184,19 @@ func EtcdClientNew(endpoints []string) client.KeysAPI {
 }
 
 // raw "/itd" not "itd" , add the etcd will ignore "/". But better change to "itd"
+
 func GetDockerNameFromID(ID string) string {
 	docker, err := dockerclient.NewDockerClient("unix:///var/run/docker.sock", nil)
 	if err != nil {
-		log.Fatal("Fail to connect to Docker daemon")
+		log.Warnf("Fail to connect to Docker daemon")
 	}
 	dockerInfo, err := docker.InspectContainer(ID)
 	if err != nil {
-		log.Fatalf("Fail to inspcet the containername ID: %s", ID)
+		log.Warnf("Fail to inspcet the containername ID: %s", ID)
 	}
 
 	return strings.TrimPrefix(dockerInfo.Name, "/")
 }
-
 func GetEnv(data []byte) map[string]string {
 	env := make(map[string]string)
 	var dat map[string]interface{}

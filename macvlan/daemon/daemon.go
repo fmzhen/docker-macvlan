@@ -88,10 +88,12 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data, err := utils.DoRequest(httpClient, u, method, path, body, h2)
+	//not should use fatal, it will exit the daemon. wo don;t want to do that.example user rm a not exist container
 	if err != nil {
-		log.Fatalln("dorequest error: ", err)
+		log.Warnln("dorequest error: ", err)
 	}
 	fmt.Printf("response %s \n", data)
+
 	// process  create a container,and store etcd
 	var dockerName string
 	r.ParseForm()
@@ -137,14 +139,21 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 
 	// process delete a container,and remove etcd data
 	if method == "DELETE" {
+		var dockerNameOrId string
 		sIndex := strings.LastIndex(path, "/")
 		eIndex := strings.LastIndex(path, "?")
 		if eIndex == -1 {
-			dockerNameOrId := path[index+1:]
+			dockerNameOrId = path[sIndex+1:]
 		} else {
-
+			dockerNameOrId = path[sIndex+1 : eIndex]
 		}
+		dockerName = utils.GetDockerNameFromID(dockerNameOrId)
+		dhcpkey := "/dhcp/" + dockerName
+		flatkey := "/flat/" + dockerName
+		kapi.Delete(context.Background(), dhcpkey, nil)
+		kapi.Delete(context.Background(), flatkey, nil)
 	}
+
 	fmt.Fprintf(w, "%s", data)
 
 }
