@@ -12,6 +12,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/coreos/etcd/Godeps/_workspace/src/golang.org/x/net/context"
 	"github.com/coreos/etcd/client"
+	"github.com/fmzhen/docker-macvlan/macvlan/dhcp"
 	"github.com/fmzhen/docker-macvlan/macvlan/flat"
 	"github.com/fmzhen/docker-macvlan/macvlan/utils"
 	"github.com/gorilla/mux"
@@ -87,7 +88,21 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 		h2[k] = vv2
 	}
 
-	data, err := utils.DoRequest(httpClient, u, method, path, body, h2)
+	// process delete a container,and remove etcd data, this should before Dorequest
+	var dockerName string
+	var dockerNameOrId string
+	if method == "DELETE" {
+		sIndex := strings.LastIndex(path, "/")
+		eIndex := strings.LastIndex(path, "?")
+		if eIndex == -1 {
+			dockerNameOrId = path[sIndex+1:]
+		} else {
+			dockerNameOrId = path[sIndex+1 : eIndex]
+		}
+		dockerName = utils.GetDockerNameFromID(dockerNameOrId)
+	}
+
+	statusCode, data, err := utils.DoRequest(httpClient, u, method, path, body, h2)
 	//not should use fatal, it will exit the daemon. wo don;t want to do that.example user rm a not exist container
 	if err != nil {
 		log.Warnln("dorequest error: ", err)
@@ -95,9 +110,8 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("response %s \n", data)
 
 	// process  create a container,and store etcd
-	var dockerName string
 	r.ParseForm()
-	if method == "POST" && strings.Contains(path, "/containers/create") {
+	if method == "POST" && strings.Contains(path, "/containers/create") && statusCode == 201 {
 		//get docker network mode
 		networkMode := utils.GetNetworkMode(body)
 		ok5 := networkMode == "bridge" || networkMode == "none"
@@ -122,7 +136,7 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 				key := "/dhcp/" + dockerName
 				_, err := kapi.Set(context.Background(), key, env["HOSTIF"], nil)
 				if err != nil {
-					log.Fatalf("set dhcp etcd error,docker name:%s, error: %v", dockerName, err)
+					log.Warnf("set dhcp etcd error,docker name:%s, error: %v", dockerName, err)
 				}
 				log.Infof("%s writed to dhcp etcd, host-interface: %s \n", dockerName, env["HOSTIF"])
 			} else if env["TYPE"] == "flat" && ok3 && ok4 {
@@ -130,24 +144,38 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 				value := env["IP"] + "," + env["GW"] + "," + env["HOSTIF"]
 				_, err := kapi.Set(context.Background(), key, value, nil)
 				if err != nil {
-					log.Fatalf("set flat etcd error, docker name: %s, err: %v", dockerName, err)
+					log.Warnf("set flat etcd error, docker name: %s, err: %v", dockerName, err)
 				}
 				log.Infof("%s writed to flat etcd, value: %s \n", dockerName, value)
 			}
 		}
 	}
-
-	// process delete a container,and remove etcd data
-	if method == "DELETE" {
-		var dockerNameOrId string
-		sIndex := strings.LastIndex(path, "/")
-		eIndex := strings.LastIndex(path, "?")
-		if eIndex == -1 {
-			dockerNameOrId = path[sIndex+1:]
-		} else {
-			dockerNameOrId = path[sIndex+1 : eIndex]
-		}
+	// process start a container,and config
+	if method == "POST" && strings.Contains(path, "/start") && statusCode == 204 {
+		eIndex := strings.LastIndex(path, "/")
+		sIndex := strings.LastIndex(path[:eIndex], "/")
+		dockerNameOrId = path[sIndex+1 : eIndex]
 		dockerName = utils.GetDockerNameFromID(dockerNameOrId)
+		if resp1, err1 := kapi.Get(context.Background(), "/dhcp/"+dockerName, nil); err1 == nil {
+			value := resp1.Node.Value
+			flat.CliCName = dockerName
+			flat.CliIF = value
+
+			dhcp.AddDHCPNetwork()
+		} else if resp2, err2 := kapi.Get(context.Background(), "/flat/"+dockerName, nil); err2 == nil {
+			value := resp2.Node.Value
+			vv := strings.Split(value, ",")
+			flat.CliCName = dockerName
+			flat.CliIP = vv[0]
+			flat.CligwIP = vv[1]
+			flat.CliIF = vv[2]
+			flat.AddContainerNetworking()
+		}
+
+	}
+
+	// process delete,the dockerName should get before the container delete.
+	if method == "DELETE" && statusCode == 204 {
 		dhcpkey := "/dhcp/" + dockerName
 		flatkey := "/flat/" + dockerName
 		kapi.Delete(context.Background(), dhcpkey, nil)

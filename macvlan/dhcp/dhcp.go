@@ -20,7 +20,7 @@ const (
 
 func Dhcp(ctx *cli.Context) {
 	dhcpParseParam(ctx)
-	addDHCPNetwork()
+	AddDHCPNetwork()
 }
 
 func dhcpParseParam(ctx *cli.Context) {
@@ -40,7 +40,7 @@ func dhcpParseParam(ctx *cli.Context) {
 	flat.CliIF = ctx.String("host-interface")
 }
 
-func addDHCPNetwork() {
+func AddDHCPNetwork() {
 
 	if ok := utils.ValidateHostIface(flat.CliIF); !ok {
 		log.Fatalf("the host-interface [ %s ] was not found.", flat.CliIF)
