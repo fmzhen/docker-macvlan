@@ -107,7 +107,8 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Warnln("dorequest error: ", err)
 	}
-	fmt.Printf("response %s \n", data)
+	fmt.Printf("response: %s \n", data)
+	fmt.Printf("statusCode: %v \n", statusCode)
 
 	// process  create a container,and store etcd
 	r.ParseForm()
@@ -160,8 +161,11 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 			value := resp1.Node.Value
 			flat.CliCName = dockerName
 			flat.CliIF = value
+			log.Infof("start the container %s, config the dhcp network from the hostinterface : %s \n", dockerName, value)
 
 			dhcp.AddDHCPNetwork()
+
+			log.Infof("start the container %s complete, and complete the dhcp config \n", dockerName)
 		} else if resp2, err2 := kapi.Get(context.Background(), "/flat/"+dockerName, nil); err2 == nil {
 			value := resp2.Node.Value
 			vv := strings.Split(value, ",")
@@ -169,7 +173,13 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 			flat.CliIP = vv[0]
 			flat.CligwIP = vv[1]
 			flat.CliIF = vv[2]
+
+			fmt.Println("gw is right : ", flat.CligwIP)
+			log.Infof("start the container %s, config the flat network form config: %s \n", dockerName, value)
+
 			flat.AddContainerNetworking()
+
+			log.Infof("start the container %s complete, end flat config \n", dockerName)
 		}
 
 	}

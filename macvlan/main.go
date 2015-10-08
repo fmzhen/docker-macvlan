@@ -9,6 +9,7 @@ import (
 	"github.com/fmzhen/docker-macvlan/macvlan/daemon"
 	"github.com/fmzhen/docker-macvlan/macvlan/dhcp"
 	"github.com/fmzhen/docker-macvlan/macvlan/flat"
+	"github.com/fmzhen/docker-macvlan/macvlan/vlan"
 )
 
 const (
@@ -58,6 +59,16 @@ func main() {
 				flat.FlagContainerName,
 			},
 			Action: dhcp.Dhcp,
+		},
+		{
+			Name:    "create-vlan",
+			Aliases: []string{"v"},
+			Usage:   "create a vlan network",
+			Flags: []cli.Flag{
+				vlan.FlagVlanName,
+				vlan.FlagVlanSubnet,
+			},
+			Action: vlan.CreateVlan,
 		},
 	}
 	app.Flags = []cli.Flag{
