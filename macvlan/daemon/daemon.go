@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -12,6 +13,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/coreos/etcd/Godeps/_workspace/src/golang.org/x/net/context"
 	"github.com/coreos/etcd/client"
+	"github.com/docker/libnetwork/ipallocator"
 	"github.com/fmzhen/docker-macvlan/macvlan/dhcp"
 	"github.com/fmzhen/docker-macvlan/macvlan/flat"
 	"github.com/fmzhen/docker-macvlan/macvlan/utils"
@@ -19,6 +21,8 @@ import (
 )
 
 var kapi client.KeysAPI
+
+var ipallocs map[string]ipallocator
 
 type EnvConfig struct {
 	TYPE   string
@@ -30,6 +34,8 @@ type EnvConfig struct {
 func Listen(absSocket string) {
 	//etcd init
 	kapi = utils.EtcdClientNew(strings.Split(flat.CliEtcd, ","))
+
+	ipallocs = make(map[string]ipallocator)
 
 	listener, err := net.Listen("unix", absSocket)
 	if err != nil {
@@ -194,6 +200,22 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Fprintf(w, "%s", data)
 
+}
+
+func CreateVlanNetwork(name string, subnet string) error {
+	if _, err := kapi.Get(context.Background(), "/vlan/"+name, nil); err == nil {
+		return errors.New("the vlan name has existed")
+	}
+	if _, err := kapi.Set(context.Background(), "/vlan/"+name, subnet, nil); err != nil {
+		return err
+	}
+	tmp := ipallocator.New()
+	_, net1, err := net.ParseCIDR(subnet)
+	if err != nil {
+		return err
+	}
+	tmp.RegisterSubnet(net1, net1)
+	ipallocs[name] = tmp
 }
 
 // test socket avaiable ,hello world

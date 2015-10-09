@@ -21,6 +21,8 @@ const (
 	socketPath    = "/run/docker/plugins/"
 )
 
+var CliEtcd string = "http://127.0.0.1:2379" //the etcd cluster
+
 func main() {
 	var flagSocket = cli.StringFlag{
 		Name:  "socket, s",
@@ -31,6 +33,8 @@ func main() {
 		Name:  "debug, d",
 		Usage: "enable debugging",
 	}
+	var FlagEtcd = cli.StringFlag{Name: "etcd", Value: CliEtcd, Usage: "etcd endpoints"}
+
 	app := cli.NewApp()
 	app.Name = appName
 	app.Usage = appUsage
@@ -74,7 +78,7 @@ func main() {
 	app.Flags = []cli.Flag{
 		flagDebug,
 		flagSocket,
-		flat.FlagEtcd,
+		FlagEtcd,
 	}
 	app.Before = initEnv
 	app.Action = Run
