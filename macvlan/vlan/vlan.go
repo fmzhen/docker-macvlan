@@ -1,15 +1,22 @@
 package vlan
 
 import (
-	"log"
-
 	"github.com/codegangsta/cli"
+	"github.com/fmzhen/docker-macvlan/macvlan/daemon"
+
+	log "github.com/Sirupsen/logrus"
 )
 
 func CreateVlan(ctx *cli.Context) {
-	err := ParseParam(ctx)
-	if err != nil {
-		log.Fatalf("Parse param error:", err)
+	vlanname := ctx.String("name")
+	vlansubnet := ctx.String("subnet")
+	vlanhostif := ctx.String("host-interface")
+
+	if err := daemon.CreateVlanNetwork(vlanname, vlansubnet, vlanhostif); err != nil {
+		log.Fatalf("create subnet error: %v", err)
 	}
-	AddContainerNetworking()
+}
+
+func Vlan(ctx *cli.Context) {
+
 }

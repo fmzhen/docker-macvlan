@@ -21,7 +21,7 @@ const (
 	socketPath    = "/run/docker/plugins/"
 )
 
-var CliEtcd string = "http://127.0.0.1:2379" //the etcd cluster
+var CliEtcd string = "http://127.0.0.1:2379"
 
 func main() {
 	var flagSocket = cli.StringFlag{
@@ -66,13 +66,23 @@ func main() {
 		},
 		{
 			Name:    "create-vlan",
-			Aliases: []string{"v"},
+			Aliases: []string{"cv"},
 			Usage:   "create a vlan network",
 			Flags: []cli.Flag{
 				vlan.FlagVlanName,
 				vlan.FlagVlanSubnet,
 			},
 			Action: vlan.CreateVlan,
+		},
+		{
+			Name:    "vlan",
+			Aliases: []string{"v"},
+			Usage:   "config a container with vlan",
+			Flags: []cli.Flag{
+				vlan.FlagAttachName,
+				vlan.FlagContainerName,
+			},
+			Action: vlan.Vlan,
 		},
 	}
 	app.Flags = []cli.Flag{
@@ -103,6 +113,6 @@ func initEnv(ctx *cli.Context) error {
 func Run(ctx *cli.Context) {
 	absSocket := fmt.Sprint(socketPath, ctx.String("socket"))
 
-	flat.CliEtcd = ctx.String("etcd")
-	daemon.Listen(absSocket)
+	CliEtcd = ctx.String("etcd")
+	daemon.Listen(absSocket, CliEtcd)
 }

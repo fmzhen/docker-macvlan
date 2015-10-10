@@ -22,7 +22,7 @@ import (
 
 var kapi client.KeysAPI
 
-var ipallocs map[string]ipallocator
+var ipallocs map[string]*ipallocator.IPAllocator
 
 type EnvConfig struct {
 	TYPE   string
@@ -31,11 +31,12 @@ type EnvConfig struct {
 	HOSTIF string
 }
 
-func Listen(absSocket string) {
+func Listen(absSocket string, CliEtcd string) {
 	//etcd init
-	kapi = utils.EtcdClientNew(strings.Split(flat.CliEtcd, ","))
+	kapi = utils.EtcdClientNew(strings.Split(CliEtcd, ","))
 
-	ipallocs = make(map[string]ipallocator)
+	//init the ipallocs. TODO: load the exist vlan ipallocator
+	ipallocs = make(map[string]*ipallocator.IPAllocator)
 
 	listener, err := net.Listen("unix", absSocket)
 	if err != nil {
@@ -202,11 +203,12 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func CreateVlanNetwork(name string, subnet string) error {
+func CreateVlanNetwork(name string, subnet string, hostif string) error {
 	if _, err := kapi.Get(context.Background(), "/vlan/"+name, nil); err == nil {
 		return errors.New("the vlan name has existed")
 	}
-	if _, err := kapi.Set(context.Background(), "/vlan/"+name, subnet, nil); err != nil {
+	val := hostif + "," + subnet
+	if _, err := kapi.Set(context.Background(), "/vlan/"+name, val, nil); err != nil {
 		return err
 	}
 	tmp := ipallocator.New()
@@ -216,6 +218,7 @@ func CreateVlanNetwork(name string, subnet string) error {
 	}
 	tmp.RegisterSubnet(net1, net1)
 	ipallocs[name] = tmp
+	return nil
 }
 
 // test socket avaiable ,hello world
