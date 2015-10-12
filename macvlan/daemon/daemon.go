@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strings"
 
 	log "github.com/Sirupsen/logrus"
@@ -18,9 +19,11 @@ import (
 	"github.com/fmzhen/docker-macvlan/macvlan/flat"
 	"github.com/fmzhen/docker-macvlan/macvlan/utils"
 	"github.com/gorilla/mux"
+	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netns"
 )
 
-var kapi client.KeysAPI
+var Kapi client.KeysAPI
 
 var ipallocs map[string]*ipallocator.IPAllocator
 
@@ -31,12 +34,13 @@ type EnvConfig struct {
 	HOSTIF string
 }
 
-func Listen(absSocket string, CliEtcd string) {
-	//etcd init
-	kapi = utils.EtcdClientNew(strings.Split(CliEtcd, ","))
+func init() {
+	Kapi = utils.EtcdClientNew(strings.Split(flat.CliEtcd, ","))
 
 	//init the ipallocs. TODO: load the exist vlan ipallocator
 	ipallocs = make(map[string]*ipallocator.IPAllocator)
+}
+func Listen(absSocket string) {
 
 	listener, err := net.Listen("unix", absSocket)
 	if err != nil {
@@ -142,7 +146,7 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 		if ok1 && ok2 && ok5 {
 			if env["TYPE"] == "dhcp" {
 				key := "/dhcp/" + dockerName
-				_, err := kapi.Set(context.Background(), key, env["HOSTIF"], nil)
+				_, err := Kapi.Set(context.Background(), key, env["HOSTIF"], nil)
 				if err != nil {
 					log.Warnf("set dhcp etcd error,docker name:%s, error: %v", dockerName, err)
 				}
@@ -150,7 +154,7 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 			} else if env["TYPE"] == "flat" && ok3 && ok4 {
 				key := "/flat/" + dockerName
 				value := env["IP"] + "," + env["GW"] + "," + env["HOSTIF"]
-				_, err := kapi.Set(context.Background(), key, value, nil)
+				_, err := Kapi.Set(context.Background(), key, value, nil)
 				if err != nil {
 					log.Warnf("set flat etcd error, docker name: %s, err: %v", dockerName, err)
 				}
@@ -164,7 +168,7 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 		sIndex := strings.LastIndex(path[:eIndex], "/")
 		dockerNameOrId = path[sIndex+1 : eIndex]
 		dockerName = utils.GetDockerNameFromID(dockerNameOrId)
-		if resp1, err1 := kapi.Get(context.Background(), "/dhcp/"+dockerName, nil); err1 == nil {
+		if resp1, err1 := Kapi.Get(context.Background(), "/dhcp/"+dockerName, nil); err1 == nil {
 			value := resp1.Node.Value
 			flat.CliCName = dockerName
 			flat.CliIF = value
@@ -173,7 +177,7 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 			dhcp.AddDHCPNetwork()
 
 			log.Infof("start the container %s complete, and complete the dhcp config \n", dockerName)
-		} else if resp2, err2 := kapi.Get(context.Background(), "/flat/"+dockerName, nil); err2 == nil {
+		} else if resp2, err2 := Kapi.Get(context.Background(), "/flat/"+dockerName, nil); err2 == nil {
 			value := resp2.Node.Value
 			vv := strings.Split(value, ",")
 			flat.CliCName = dockerName
@@ -195,20 +199,22 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 	if method == "DELETE" && statusCode == 204 {
 		dhcpkey := "/dhcp/" + dockerName
 		flatkey := "/flat/" + dockerName
-		kapi.Delete(context.Background(), dhcpkey, nil)
-		kapi.Delete(context.Background(), flatkey, nil)
+		Kapi.Delete(context.Background(), dhcpkey, nil)
+		Kapi.Delete(context.Background(), flatkey, nil)
 	}
 
 	fmt.Fprintf(w, "%s", data)
 
 }
 
+// the global var is nil in this function, although init in the Listen function,and listen func exec first.
+// so the common var should init in func init
 func CreateVlanNetwork(name string, subnet string, hostif string) error {
-	if _, err := kapi.Get(context.Background(), "/vlan/"+name, nil); err == nil {
+	if _, err := Kapi.Get(context.Background(), "/vlan/"+name, nil); err == nil {
 		return errors.New("the vlan name has existed")
 	}
 	val := hostif + "," + subnet
-	if _, err := kapi.Set(context.Background(), "/vlan/"+name, val, nil); err != nil {
+	if _, err := Kapi.Set(context.Background(), "/vlan/"+name, val, nil); err != nil {
 		return err
 	}
 	tmp := ipallocator.New()
@@ -219,6 +225,113 @@ func CreateVlanNetwork(name string, subnet string, hostif string) error {
 	tmp.RegisterSubnet(net1, net1)
 	ipallocs[name] = tmp
 	return nil
+}
+
+func CheckVlanName(vlanname string) (string, bool) {
+	if res, _ := Kapi.Get(context.Background(), vlanname, nil); err != nil {
+		return "", false
+	} else {
+		return res.Node.Value, true
+	}
+}
+
+func AddVlannetwork(etcdval string, vlanid string, containerName string) {
+	ss := strings.Split(etcdval, ",")
+	hostif := ss[0]
+	if ok := utils.ValidateHostIface(hostif); !ok {
+		log.Warnf("the host interface not exist")
+		return
+	}
+
+	vlandevName = hostif + "." + vlanid
+	hostEth, _ := netlink.LinkByName(hostif)
+
+	if ok := utils.ValidateHostIface(vlandevName); ok {
+
+	} else {
+		//not exist ,create the vlan device
+		vlandev := &netlink.Vlan{
+			LinkAttrs: netlink.LinkAttrs{
+				Name:        vlandevName,
+				ParentIndex: hostEth.Attrs().Index,
+			},
+			VlanId: vlanid,
+		}
+		if err := netlink.LinkAdd(vlandev); err != nil {
+			log.Warnf("failed to create vlandev: [ %v ] with the error: %s", vlandev, err)
+			return
+		}
+	}
+
+	netlink.LinkSetUp(vlandev)
+	macvlanname := utils.GenerateRandomName("vlan"+vlanid, 5)
+	//create the macvlan device
+	macvlandev := &netlink.Macvlan{
+		LinkAttrs: netlink.LinkAttrs{
+			Name:        macvlanname,
+			ParentIndex: vlandev.Attrs().Index,
+		},
+		Mode: netlink.MACVLAN_MODE_BRIDGE,
+	}
+
+	if err := netlink.LinkAdd(macvlanname); err != nil {
+		log.Warnf("failed to create Macvlan: [ %v ] with the error: %s", macvlandev, err)
+		return
+	}
+
+	dockerPid := utils.DockerPid(containerName)
+	//the macvlandev can be use directly, don't get netlink.byname again.
+	netlink.LinkSetNsPid(macvlandev, dockerPid)
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	//get root network naAddVlannetworkmespace
+	origns, _ := netns.Get()
+	defer origns.Close()
+
+	//enter the docker container network
+	dockerNS, _ := netns.GetFromPid(dockerPid)
+	defer dockerNS.Close()
+
+	netns.Set(dockerNS)
+
+	netlink.LinkSetDown(macvlandev)
+	netlink.LinkSetName(macvlandev, "eth1")
+
+	_, network, _ := net.ParseCIDR(ss[1])
+	ip, _ := ipallocs[vlanid].RequestIP(network, nil)
+	ind := strings.LastIndex(ss[1], "/")
+	ipstring := ip.String() + ss[1][ind:]
+
+	ip.String()
+	addr, err := netlink.ParseAddr(CliIP)
+
+	netlink.AddrAdd(macvlandev, addr)
+	netlink.LinkSetUp(macvlandev)
+
+	routes, _ := netlink.RouteList(nil, netlink.FAMILY_V4)
+	for _, r := range routes {
+		if r.Dst == nil {
+			if err := netlink.RouteDel(&r); err != nil {
+				log.Warnf("delete the default error: ", err)
+			}
+		}
+	}
+
+	if CligwIP == "" {
+		log.Fatal("container gw is null")
+	}
+
+	defaultRoute := &netlink.Route{
+		Dst:       nil,
+		Gw:        net.ParseIP(CligwIP),
+		LinkIndex: macvlandev1.Attrs().Index,
+	}
+	if err := netlink.RouteAdd(defaultRoute); err != nil {
+		log.Warnf("create default route error: ", err)
+	}
+	netns.Set(origns)
 }
 
 // test socket avaiable ,hello world

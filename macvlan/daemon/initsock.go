@@ -14,11 +14,12 @@ func InitSock(socketFile string, socketPath string) {
 	}
 	// concatenate the absolute path to the spec file handle
 	absFile := fmt.Sprint(socketPath, socketFile)
-	// If the plugin socket file already exists, remove it.
+	/* If the plugin socket file already exists, remove it.
 	if _, err := os.Stat(absFile); err == nil {
 		log.Debugf("socket file [ %s ] already exists, unlinking the old file handle..", absFile)
 		RemoveSock(absFile)
 	}
+	*/
 	log.Debugf("The plugin absolute path and handle is [ %s ]", absFile)
 }
 

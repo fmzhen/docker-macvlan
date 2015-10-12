@@ -21,8 +21,6 @@ const (
 	socketPath    = "/run/docker/plugins/"
 )
 
-var CliEtcd string = "http://127.0.0.1:2379"
-
 func main() {
 	var flagSocket = cli.StringFlag{
 		Name:  "socket, s",
@@ -33,7 +31,6 @@ func main() {
 		Name:  "debug, d",
 		Usage: "enable debugging",
 	}
-	var FlagEtcd = cli.StringFlag{Name: "etcd", Value: CliEtcd, Usage: "etcd endpoints"}
 
 	app := cli.NewApp()
 	app.Name = appName
@@ -71,6 +68,7 @@ func main() {
 			Flags: []cli.Flag{
 				vlan.FlagVlanName,
 				vlan.FlagVlanSubnet,
+				vlan.FlagHostIF,
 			},
 			Action: vlan.CreateVlan,
 		},
@@ -88,7 +86,7 @@ func main() {
 	app.Flags = []cli.Flag{
 		flagDebug,
 		flagSocket,
-		FlagEtcd,
+		flat.FlagEtcd,
 	}
 	app.Before = initEnv
 	app.Action = Run
@@ -113,6 +111,6 @@ func initEnv(ctx *cli.Context) error {
 func Run(ctx *cli.Context) {
 	absSocket := fmt.Sprint(socketPath, ctx.String("socket"))
 
-	CliEtcd = ctx.String("etcd")
-	daemon.Listen(absSocket, CliEtcd)
+	flat.CliEtcd = ctx.String("etcd")
+	daemon.Listen(absSocket)
 }

@@ -10,6 +10,7 @@ var (
 	FlagIF            = cli.StringFlag{Name: "host-interface", Usage: "Host interface which create macvlan device"}
 	FlagMTU           = cli.IntFlag{Name: "mtu", Value: CliMTU, Usage: "the MTU of macvlan device"}
 	FlagContainerName = cli.StringFlag{Name: "container-name", Usage: "the container name which want to config"}
+	FlagEtcd          = cli.StringFlag{Name: "etcd", Value: CliEtcd, Usage: "etcd endpoints"}
 )
 
 // flat config struct.
@@ -19,4 +20,5 @@ var (
 	CligwIP  string // this is the address of an external route
 	CliMTU   = 1500 // generally accepted default MTU
 	CliCName string // the Docker container name which want to config
+	CliEtcd  string = "http://127.0.0.1:2379"
 )

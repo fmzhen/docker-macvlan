@@ -18,5 +18,5 @@ var (
 	CliAttachName    string
 	CliContainerName string
 	CliVlanSubnet    string
-	CliVlanHostIF    = "eth0"
+	CliVlanHostIF    string = "eth0"
 )

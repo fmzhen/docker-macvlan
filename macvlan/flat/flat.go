@@ -114,7 +114,8 @@ func AddContainerNetworking() {
 
 	netns.Set(dockerNS)
 
-	// use macvlandev can cause error,need type assertion. netlink.Macvlan not must be netlink.Link,fmz
+	// use macvlandev can cause error,need type assertion. netlink.Macvlan not must be netlink.Link,fmz(realy? the vlan action add)
+	// it is wrong,
 	macvlandev1, _ := netlink.LinkByName(macvlandev.Attrs().Name)
 
 	// when the eth is up, set name fail,: Device or resource busy
