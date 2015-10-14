@@ -82,6 +82,15 @@ func main() {
 			},
 			Action: vlan.Vlan,
 		},
+		{
+			Name:    "publish",
+			Aliases: []string{"p"},
+			Usage:   "plublis a container to a service",
+			Flags: []cli.Flag{
+				service.FlagContainerName,
+			},
+			Action: service.Service,
+		},
 	}
 	app.Flags = []cli.Flag{
 		flagDebug,

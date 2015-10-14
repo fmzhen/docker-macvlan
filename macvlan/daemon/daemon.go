@@ -366,6 +366,13 @@ func AddVlannetwork(etcdval string, vlanid string, containerName string) {
 	netns.Set(origns)
 }
 
+func AddService(key string, value string) {
+	//TODO:
+	if _, err := Kapi.Set(context.Background(), "/service/"+key, value, nil); err != nil {
+		log.Fatalf("the container publish fail \n")
+	}
+}
+
 // test socket avaiable ,hello world
 func sayhelloName(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()       //解析参数，默认是不会解析的
