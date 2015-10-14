@@ -25,10 +25,8 @@ func Vlan(ctx *cli.Context) {
 	if !ok {
 		log.Fatalf("the attach vlan name doesn't exist, please create fitst \n")
 	}
-	
-	//TODO: verify whether the container exist
-}
 
-func AddVlanNetwork() {
-		
+	//TODO: verify whether the container exist
+
+	daemon.AddVlannetwork(res, CliAttachName, CliContainerName)
 }

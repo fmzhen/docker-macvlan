@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"runtime"
+	"strconv"
 	"strings"
 
 	log "github.com/Sirupsen/logrus"
@@ -143,20 +144,29 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 		_, ok2 := env["HOSTIF"]
 		_, ok3 := env["IP"]
 		_, ok4 := env["GW"]
-		if ok1 && ok2 && ok5 {
-			if env["TYPE"] == "dhcp" {
+		_, ok6 := env["VLANID"]
+		if ok1 && ok5 {
+			if env["TYPE"] == "dhcp" && ok2 {
 				key := "/dhcp/" + dockerName
 				_, err := Kapi.Set(context.Background(), key, env["HOSTIF"], nil)
 				if err != nil {
 					log.Warnf("set dhcp etcd error,docker name:%s, error: %v", dockerName, err)
 				}
 				log.Infof("%s writed to dhcp etcd, host-interface: %s \n", dockerName, env["HOSTIF"])
-			} else if env["TYPE"] == "flat" && ok3 && ok4 {
+			} else if env["TYPE"] == "flat" && ok3 && ok4 && ok2 {
 				key := "/flat/" + dockerName
 				value := env["IP"] + "," + env["GW"] + "," + env["HOSTIF"]
 				_, err := Kapi.Set(context.Background(), key, value, nil)
 				if err != nil {
 					log.Warnf("set flat etcd error, docker name: %s, err: %v", dockerName, err)
+				}
+				log.Infof("%s writed to flat etcd, value: %s \n", dockerName, value)
+			} else if env["TYPE"] == "vlan" && ok6 {
+				key := "/vland/" + dockerName
+				value := env["VLANID"]
+				_, err := Kapi.Set(context.Background(), key, value, nil)
+				if err != nil {
+					log.Warnf("set vland etcd error, docker name: %s, err: %v", dockerName, err)
 				}
 				log.Infof("%s writed to flat etcd, value: %s \n", dockerName, value)
 			}
@@ -191,6 +201,14 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 			flat.AddContainerNetworking()
 
 			log.Infof("start the container %s complete, end flat config \n", dockerName)
+		} else if resp3, err3 := Kapi.Get(context.Background(), "/vland/"+dockerName, nil); err3 == nil {
+			value := resp3.Node.Value
+
+			res, ok := CheckVlanName(value)
+			if !ok {
+				log.Fatalf("the attach vlan name doesn't exist, please create fitst \n")
+			}
+			AddVlannetwork(res, value, dockerName)
 		}
 
 	}
@@ -199,8 +217,10 @@ func justForward(w http.ResponseWriter, r *http.Request) {
 	if method == "DELETE" && statusCode == 204 {
 		dhcpkey := "/dhcp/" + dockerName
 		flatkey := "/flat/" + dockerName
+		vlankey := "/vland/" + dockerName
 		Kapi.Delete(context.Background(), dhcpkey, nil)
 		Kapi.Delete(context.Background(), flatkey, nil)
+		Kapi.Delete(context.Background(), vlankey, nil)
 	}
 
 	fmt.Fprintf(w, "%s", data)
@@ -228,7 +248,8 @@ func CreateVlanNetwork(name string, subnet string, hostif string) error {
 }
 
 func CheckVlanName(vlanname string) (string, bool) {
-	if res, _ := Kapi.Get(context.Background(), vlanname, nil); err != nil {
+	etcdkey := "/vlan/" + vlanname
+	if res, err := Kapi.Get(context.Background(), etcdkey, nil); err != nil {
 		return "", false
 	} else {
 		return res.Node.Value, true
@@ -243,19 +264,26 @@ func AddVlannetwork(etcdval string, vlanid string, containerName string) {
 		return
 	}
 
-	vlandevName = hostif + "." + vlanid
+	vlandevName := hostif + "." + vlanid
 	hostEth, _ := netlink.LinkByName(hostif)
 
+	intvlanid, err := strconv.Atoi(vlanid)
+	if err != nil {
+		log.Warnf("the vlan id convert error: \n")
+		return
+	}
+
+	var vlandev *netlink.Vlan
 	if ok := utils.ValidateHostIface(vlandevName); ok {
 
 	} else {
 		//not exist ,create the vlan device
-		vlandev := &netlink.Vlan{
+		vlandev = &netlink.Vlan{
 			LinkAttrs: netlink.LinkAttrs{
 				Name:        vlandevName,
 				ParentIndex: hostEth.Attrs().Index,
 			},
-			VlanId: vlanid,
+			VlanId: intvlanid,
 		}
 		if err := netlink.LinkAdd(vlandev); err != nil {
 			log.Warnf("failed to create vlandev: [ %v ] with the error: %s", vlandev, err)
@@ -264,7 +292,7 @@ func AddVlannetwork(etcdval string, vlanid string, containerName string) {
 	}
 
 	netlink.LinkSetUp(vlandev)
-	macvlanname := utils.GenerateRandomName("vlan"+vlanid, 5)
+	macvlanname, _ := utils.GenerateRandomName("vlan"+vlanid, 5)
 	//create the macvlan device
 	macvlandev := &netlink.Macvlan{
 		LinkAttrs: netlink.LinkAttrs{
@@ -274,7 +302,7 @@ func AddVlannetwork(etcdval string, vlanid string, containerName string) {
 		Mode: netlink.MACVLAN_MODE_BRIDGE,
 	}
 
-	if err := netlink.LinkAdd(macvlanname); err != nil {
+	if err := netlink.LinkAdd(macvlandev); err != nil {
 		log.Warnf("failed to create Macvlan: [ %v ] with the error: %s", macvlandev, err)
 		return
 	}
@@ -300,37 +328,41 @@ func AddVlannetwork(etcdval string, vlanid string, containerName string) {
 	netlink.LinkSetName(macvlandev, "eth1")
 
 	_, network, _ := net.ParseCIDR(ss[1])
+	if _, ok := ipallocs[vlanid]; !ok {
+		log.Fatalf("the ipallocator is null \n")
+	}
 	ip, _ := ipallocs[vlanid].RequestIP(network, nil)
 	ind := strings.LastIndex(ss[1], "/")
 	ipstring := ip.String() + ss[1][ind:]
 
-	ip.String()
-	addr, err := netlink.ParseAddr(CliIP)
+	addr, err := netlink.ParseAddr(ipstring)
 
 	netlink.AddrAdd(macvlandev, addr)
 	netlink.LinkSetUp(macvlandev)
 
-	routes, _ := netlink.RouteList(nil, netlink.FAMILY_V4)
-	for _, r := range routes {
-		if r.Dst == nil {
-			if err := netlink.RouteDel(&r); err != nil {
-				log.Warnf("delete the default error: ", err)
+	/*
+		routes, _ := netlink.RouteList(nil, netlink.FAMILY_V4)
+		for _, r := range routes {
+			if r.Dst == nil {
+				if err := netlink.RouteDel(&r); err != nil {
+					log.Warnf("delete the default error: ", err)
+				}
 			}
 		}
-	}
 
-	if CligwIP == "" {
-		log.Fatal("container gw is null")
-	}
+		if CligwIP == "" {
+			log.Fatal("container gw is null")
+		}
 
-	defaultRoute := &netlink.Route{
-		Dst:       nil,
-		Gw:        net.ParseIP(CligwIP),
-		LinkIndex: macvlandev1.Attrs().Index,
-	}
-	if err := netlink.RouteAdd(defaultRoute); err != nil {
-		log.Warnf("create default route error: ", err)
-	}
+		defaultRoute := &netlink.Route{
+			Dst:       nil,
+			Gw:        net.ParseIP(CligwIP),
+			LinkIndex: macvlandev1.Attrs().Index,
+		}
+		if err := netlink.RouteAdd(defaultRoute); err != nil {
+			log.Warnf("create default route error: ", err)
+		}
+	*/
 	netns.Set(origns)
 }
 
